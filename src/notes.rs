@@ -2,7 +2,7 @@
 //! journal/fsync writes from the UI thread.
 
 use gpui::prelude::*;
-use gpui::{div, px, App, Context, IntoElement, ParentElement, Render, Styled, Window};
+use gpui::{div, px, rems, Context, IntoElement, ParentElement, Render, Styled, Window};
 use mdrv_db::engine::{Engine, EngineConfig, MutateRequest};
 use mdrv_db::entry::{Op, PortValue, SqlKind};
 use mdrv_db::port_turso::TursoPort;
@@ -18,7 +18,7 @@ pub fn set_android_data_dir(dir: Option<std::path::PathBuf>) {
     }
 }
 
-fn data_root() -> std::path::PathBuf {
+pub fn data_root() -> std::path::PathBuf {
     if let Some(dir) = ANDROID_DATA_DIR.get() {
         return dir.join("mdrv-lab");
     }
@@ -52,6 +52,11 @@ impl NotesScreen {
 
     fn open_db(&mut self, cx: &mut Context<Self>) {
         let root = data_root();
+        if let Err(e) = std::fs::create_dir_all(&root) {
+            self.err = Some(format!("mkdir: {e}"));
+            cx.notify();
+            return;
+        }
         let db_path = root.join("turso.sqlite");
         let port = match TursoPort::open(db_path) {
             Ok(p) => p,
@@ -62,7 +67,7 @@ impl NotesScreen {
             }
         };
         match Engine::open(&root, "mdrv-lab", Box::new(port), EngineConfig::default()) {
-            Ok(mut engine) => {
+            Ok(engine) => {
                 if let Err(e) = engine.bootstrap(&[format!(
                     "CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, title TEXT NOT NULL, created_ms INTEGER NOT NULL)"
                 )]) {
@@ -186,19 +191,19 @@ impl NotesScreen {
     fn btn(
         &self,
         id: &'static str,
-        label: &str,
+        label: &'static str,
         cx: &mut Context<Self>,
         f: impl Fn(&mut Self, &mut Context<Self>) + 'static,
     ) -> impl IntoElement {
         div()
             .id(id)
-            .px(3)
-            .py(1.5)
+            .px(px(3.))
+            .py(px(1.5))
             .mr_2()
-            .rounded(6.)
+            .rounded(px(6.))
             .bg(gpui::rgb(0x1f2937))
             .cursor_pointer()
-            .text_size(px(14.))
+            .text_size(rems(0.875))
             .child(label)
             .on_mouse_down(
                 gpui::MouseButton::Left,
@@ -222,11 +227,11 @@ impl Render for NotesScreen {
                     .flex()
                     .flex_row()
                     .gap_2()
-                    .px(2)
-                    .py(1)
-                    .rounded(6.)
+                    .px(px(2.))
+                    .py(px(1.))
+                    .rounded(px(6.))
                     .bg(gpui::rgb(0x17171b))
-                    .text_size(px(14.))
+                    .text_size(rems(0.875))
                     .child(div().text_color(gpui::rgb(0x6b6b74)).child(format!("{id}")))
                     .child(title.clone()),
             );
@@ -235,7 +240,7 @@ impl Render for NotesScreen {
             list = list.child(
                 div()
                     .p_2()
-                    .text_size(px(13.))
+                    .text_size(rems(0.8125))
                     .text_color(gpui::rgb(0x6b6b74))
                     .child("no notes — tap add"),
             );
@@ -258,15 +263,15 @@ impl Render for NotesScreen {
                         div()
                             .flex_1()
                             .text_right()
-                            .text_size(px(12.))
+                            .text_size(rems(0.75))
                             .text_color(gpui::rgb(0x6b6b74))
                             .child(format!("lsn {}", self.lsn)),
                     ),
             )
             .child(
                 div()
-                    .px(2)
-                    .text_size(px(12.))
+                    .px(px(2.))
+                    .text_size(rems(0.75))
                     .text_color(match &self.err {
                         Some(e) if e.starts_with("ok") => gpui::rgb(0x4ade80),
                         Some(_) => gpui::rgb(0xf87171),

@@ -5,6 +5,11 @@ edition = "2021"
 publish = false
 description = "GPUI-on-Android lab: mdrv-db CRUD + image transforms + 3D orbit"
 
+# std's File::try_lock is unimplemented on Android; vendored fjall uses
+# libc::flock directly there (see vendor/fjall/src/locked_file.rs).
+[patch.crates-io]
+fjall = { path = "vendor/fjall" }
+
 [lib]
 crate-type = ["rlib", "cdylib"]
 
@@ -18,25 +23,56 @@ default = []
 desktop = ["dep:gpui_platform"]
 
 [dependencies]
-gpui = { package = "mdrv-gpui-ce", git = "https://github.com/mdrv/gpui-ce", tag = "mdrv-gpui-0.0.260930.0", default-features = false }
-# gpui = { package = "mdrv-gpui-ce", path = "/g/gpui-ce/crates/gpui", default-features = false } # DEV
-gpui_wgpu = { package = "mdrv-gpui-wgpu", git = "https://github.com/mdrv/gpui-ce", tag = "mdrv-gpui-0.0.260930.0", features = ["font-kit"] }
-# gpui_wgpu = { package = "mdrv-gpui-wgpu", path = "/g/gpui-ce/crates/gpui_wgpu", features = ["font-kit"] } # DEV
-mdrv-gpui-mobile = { path = "/g/mdrv-gpui-mobile" }
+gpui = { package = "mdrv-gpui-ce", git = "https://github.com/mdrv/mdrv-gpui-ce", tag = "mdrv-gpui-0.0.260930.0", default-features = false }
+# gpui = { package = "mdrv-gpui-ce", path = "/g/mdrv-gpui-ce/crates/gpui", default-features = false } # DEV
+gpui_wgpu = { package = "mdrv-gpui-wgpu", git = "https://github.com/mdrv/mdrv-gpui-ce", tag = "mdrv-gpui-0.0.260930.0", features = ["font-kit"] }
+# gpui_wgpu = { package = "mdrv-gpui-wgpu", path = "/g/mdrv-gpui-ce/crates/gpui_wgpu", features = ["font-kit"] } # DEV
+gpui-mobile = { path = "/g/mdrv-gpui-mobile" }
 mdrv-db = { path = "/g/mdrv-db/crates/mdrv-db", features = ["turso"] }
 wgpu = "29.0.3"
 gltf = "1"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 bytemuck = { version = "1", features = ["derive"] }
 anyhow = "1"
+# Audio playback (kids-app SFX); cpal uses the oboe backend on Android.
+rodio = { version = "0.22", default-features = false, features = ["playback", "wav"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }
+# same major as gpui-mobile so JavaVM/JNIEnv types line up
+jni = "0.22"
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-gpui_platform = { package = "mdrv-gpui-platform", git = "https://github.com/mdrv/gpui-ce", tag = "mdrv-gpui-0.0.260930.0", optional = true, features = ["wayland"] }
+gpui_platform = { package = "mdrv-gpui-platform", git = "https://github.com/mdrv/mdrv-gpui-ce", tag = "mdrv-gpui-0.0.260930.0", optional = true, features = ["wayland"] }
 
 [profile.release]
 lto = "thin"
 codegen-units = 1
 strip = true
+
+# Local gpui_wgpu for renderer experiments (path-MSAA cap) — mirrors the pinned tag.
+[patch."https://github.com/mdrv/mdrv-gpui-ce"]
+mdrv-gpui-ce = { path = "/g/mdrv-gpui-ce/crates/gpui" }
+mdrv-gpui-collections = { path = "/g/mdrv-gpui-ce/crates/gpui_collections" }
+mdrv-gpui-util = { path = "/g/mdrv-gpui-ce/crates/gpui_ce_util" }
+mdrv-gpui-macros = { path = "/g/mdrv-gpui-ce/crates/gpui_macros" }
+mdrv-gpui-shared-string = { path = "/g/mdrv-gpui-ce/crates/gpui_shared_string" }
+mdrv-gpui-refineable = { path = "/g/mdrv-gpui-ce/crates/gpui_refineable" }
+mdrv-gpui-derive-refineable = { path = "/g/mdrv-gpui-ce/crates/gpui_derive_refineable" }
+mdrv-gpui-scheduler = { path = "/g/mdrv-gpui-ce/crates/gpui_scheduler" }
+mdrv-gpui-sum-tree = { path = "/g/mdrv-gpui-ce/crates/gpui_sum_tree" }
+mdrv-gpui-platform = { path = "/g/mdrv-gpui-ce/crates/gpui_platform" }
+mdrv-gpui-linux = { path = "/g/mdrv-gpui-ce/crates/gpui_linux" }
+mdrv-gpui-wgpu = { path = "/g/mdrv-gpui-ce/crates/gpui_wgpu" }
+mdrv-gpui-render = { path = "/g/mdrv-gpui-ce/crates/gpui_render" }
+mdrv-gpui-web = { path = "/g/mdrv-gpui-ce/crates/gpui_web" }
+mdrv-gpui-apple = { path = "/g/mdrv-gpui-ce/crates/gpui_apple" }
+mdrv-gpui-macos = { path = "/g/mdrv-gpui-ce/crates/gpui_macos" }
+mdrv-gpui-media = { path = "/g/mdrv-gpui-ce/crates/gpui_media" }
+mdrv-gpui-windows = { path = "/g/mdrv-gpui-ce/crates/gpui_windows" }
+mdrv-gpui-tokio = { path = "/g/mdrv-gpui-ce/crates/gpui_tokio" }
+mdrv-gpui-elements = { path = "/g/mdrv-gpui-ce/crates/gpui_elements" }
+mdrv-gpui-zed-util = { path = "/g/mdrv-gpui-ce/crates/gpui_zed_util" }
+mdrv-gpui-path = { path = "/g/mdrv-gpui-ce/crates/gpui_path" }
+perf = { path = "/g/mdrv-gpui-ce/tooling/perf" }
+arrayref = { path = "/g/mdrv-gpui-ce/vendor/arrayref" }

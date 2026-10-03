@@ -1,0 +1,5 @@
+[target.aarch64-linux-android]
+linker = "aarch64-linux-android26-clang"
+
+[env]
+RUST_FONTCONFIG_DLOPEN = "on"

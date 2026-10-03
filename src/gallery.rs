@@ -5,12 +5,13 @@
 
 use gpui::prelude::*;
 use gpui::{
-    div, px, Context, ImageSource, IntoElement, ParentElement, Render, RenderImage, Styled, Window,
+    div, px, rems, Context, ImageSource, IntoElement, ParentElement, Render, RenderImage, Styled,
+    Window,
 };
 use std::path::PathBuf;
 use std::sync::Arc;
 
-fn asset_path(name: &str) -> PathBuf {
+pub fn asset_path(name: &str) -> PathBuf {
     if let Ok(dir) = std::env::var("MDRV_LAB_ASSETS") {
         return PathBuf::from(dir).join(name);
     }
@@ -28,9 +29,12 @@ pub struct GalleryScreen {
     source_rgba: Option<image::RgbaImage>,
     render: Option<Arc<RenderImage>>,
     rotation_steps: u8,
+    /// Accumulated two-finger twist (degrees) not yet committed to a
+    /// 90° rotation step (Android pinch gesture).
+    twist: f32,
     zoom: f32,
-    pan: gpui::Point<f32>,
-    dragging: Option<gpui::Point<f32>>,
+    pan: gpui::Point<gpui::Pixels>,
+    dragging: Option<gpui::Point<gpui::Pixels>>,
     err: Option<String>,
 }
 
@@ -40,8 +44,9 @@ impl GalleryScreen {
             source_rgba: None,
             render: None,
             rotation_steps: 0,
+            twist: 0.0,
             zoom: 1.0,
-            pan: gpui::point(0., 0.),
+            pan: gpui::point(gpui::px(0.), gpui::px(0.)),
             dragging: None,
             err: None,
         };
@@ -83,16 +88,16 @@ impl GalleryScreen {
     fn btn(
         &self,
         id: &'static str,
-        label: &str,
+        label: &'static str,
         cx: &mut Context<Self>,
         f: impl Fn(&mut Self) + 'static,
     ) -> impl IntoElement {
         div()
             .id(id)
-            .px(3)
-            .py(1.5)
+            .px(px(3.))
+            .py(px(1.5))
             .mr_2()
-            .rounded(6.)
+            .rounded(px(6.))
             .bg(gpui::rgb(0x1f2937))
             .cursor_pointer()
             .text_size(px(14.))
@@ -109,6 +114,33 @@ impl GalleryScreen {
 
 impl Render for GalleryScreen {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // Android: drain two-finger pinch/rotate from the fork's gesture
+        // tracker (fed by AndroidWindow::handle_touch).
+        #[cfg(target_os = "android")]
+        {
+            let s = gpui_mobile::android::gesture::take_scale();
+            if s != 1.0 {
+                self.zoom = (self.zoom * s).clamp(0.2, 6.);
+            }
+            let rot = gpui_mobile::android::gesture::take_rotation_delta();
+            if rot.abs() > 1.0 {
+                self.twist += rot;
+                let quarters = (self.twist / 45.0) as i32;
+                if quarters != 0 {
+                    self.twist -= quarters as f32 * 45.0;
+                    self.rotation_steps = if quarters > 0 {
+                        self.rotation_steps.wrapping_add(quarters as u8)
+                    } else {
+                        self.rotation_steps.wrapping_sub((-quarters) as u8)
+                    };
+                    self.rebuild();
+                }
+            }
+            if gpui_mobile::android::gesture::is_pinching() {
+                cx.notify(); // keep live-updating while fingers are down
+            }
+        }
+
         let zoom = self.zoom;
         let pan = self.pan;
         let steps = self.rotation_steps % 4;
@@ -122,16 +154,19 @@ impl Render for GalleryScreen {
         let disp_h = disp_w * h as f32 / w as f32;
 
         let img_row = match self.render.clone() {
-            Some(render) => div().ml(px(40. + pan.x)).mt(px(20. + pan.y)).child(
-                gpui::img(ImageSource::Render(render))
-                    .w(px(disp_w))
-                    .h(px(disp_h))
-                    .rounded(8.),
-            ),
+            Some(render) => div()
+                .ml(px(40. + f32::from(pan.x)))
+                .mt(px(20. + f32::from(pan.y)))
+                .child(
+                    gpui::img(ImageSource::Render(render))
+                        .w(px(disp_w))
+                        .h(px(disp_h))
+                        .rounded(px(8.)),
+                ),
             None => div()
                 .ml(px(20.))
                 .mt(px(20.))
-                .text_size(px(13.))
+                .text_size(rems(0.8125))
                 .text_color(gpui::rgb(0xf87171))
                 .child(self.err.clone().unwrap_or_else(|| "no image".into())),
         };
@@ -154,7 +189,7 @@ impl Render for GalleryScreen {
                     }))
                     .child(self.btn("rst", "reset", cx, |s| {
                         s.zoom = 1.0;
-                        s.pan = gpui::point(0., 0.);
+                        s.pan = gpui::point(gpui::px(0.), gpui::px(0.));
                         s.rotation_steps = 0;
                         s.rebuild();
                     }))
@@ -200,7 +235,7 @@ impl Render for GalleryScreen {
                     )
                     .on_scroll_wheel(cx.listener(|this, e: &gpui::ScrollWheelEvent, _, cx| {
                         let delta = e.delta.pixel_delta(px(1.));
-                        let factor = if delta.y > 0. { 1.1 } else { 1. / 1.1 };
+                        let factor = if delta.y > px(0.) { 1.1 } else { 1. / 1.1 };
                         this.zoom = (this.zoom * factor).clamp(0.2, 6.);
                         cx.notify();
                     }))
